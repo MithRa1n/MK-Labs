@@ -15,9 +15,10 @@ const char* ssid = "ESP8266_AP";
 const char* pass = "12345678";
 
 ESP8266WebServer server(80);
-SoftwareSerial mySerial(D2, D1, false);
-CommunicationService communicationService(mySerial, 115200);
+SoftwareSerial mySerial(D7, D6, false);
+CommunicationService communicationService(mySerial, 115200); 
 WebSocketsServer webSocket(81);
+
 
 volatile bool buttonHeld = false;
 volatile unsigned long buttonPressStart = 0;
@@ -36,6 +37,7 @@ void setup() {
     setupHardware();
     setupWiFiServer();
     logStatus();
+    communicationService.init();
 }
 
 void loop() {
@@ -182,7 +184,7 @@ void setupWiFiServer() {
     });
 
     server.on("/remote", []() {
-        communicationService.send(ToogleCommand::ON);
+        communicationService.send(ToogleCommand::STOP);
         Serial.println("[WEB] Sent 'ON' command to partner.");
         server.send(204);
     });
@@ -192,4 +194,3 @@ void setupWiFiServer() {
     webSocket.onEvent(webSocketEvent);
     Serial.println("[WEB] Server & WebSocket started.");
 }
-

@@ -1,16 +1,13 @@
 #include "CommunicationService.h"
-#include <thread>
 
 CommunicationService::CommunicationService(SoftwareSerial& serial, uint32_t baudRate)
     : communicationSerial(serial), baudRate(baudRate)
 {
-   
-
 }
 
 void CommunicationService::init()
 {
-    communicationSerial.begin(baudRate, SWSERIAL_6E2,D7, D6);
+    communicationSerial.begin(baudRate, SWSERIAL_8E2);
 }
 
 void CommunicationService::send(ToogleCommand command)
@@ -27,8 +24,10 @@ void CommunicationService::onReceive(CommandDelegate commandDelegate)
         int receivedData = communicationSerial.read(); 
         Serial.print("Received data: ");
         Serial.println(receivedData);
-        if (receivedData == (uint8_t)ToogleCommand::ON || 
-            receivedData == (uint8_t)ToogleCommand::OFF) {
+        
+        if (receivedData == (uint8_t)ToogleCommand::ON   ||
+            receivedData == (uint8_t)ToogleCommand::OFF  ||
+            receivedData == (uint8_t)ToogleCommand::STOP) {
             commandDelegate((ToogleCommand)receivedData);
         }
     }

@@ -13,5 +13,5 @@ public:
     void onReceive(CommandDelegate commandDelegate);
 private:
     SoftwareSerial& communicationSerial; 
-    uint32_t baudRate = 115200;
+    uint32_t baudRate;
 };
