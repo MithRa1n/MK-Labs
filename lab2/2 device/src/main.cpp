@@ -2,16 +2,18 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include "CommunicationService.h"
+#include <WebSocketsServer.h> 
 
-#define BUTTON_PIN D6
-#define LED1 D3
-#define LED2 D5
-#define LED3 D7
+#define BUTTON_PIN D3
+#define LED1 D5
+#define LED2 D2
+#define LED3 D1
 
 const char* apSSID = "ESP8266-AP";
 const char* apPassword = "123456789";
 
 ESP8266WebServer server(80);
+WebSocketsServer webSocket(81);
 SoftwareSerial mySerial(D7, D6, false);
 CommunicationService communicationService(mySerial, 115200);
 
@@ -41,48 +43,70 @@ void setupPins() {
     pinMode(LED3, OUTPUT);
 }
 
+void sendLEDState() {
+    String message = String(digitalRead(LED1)) + "," +
+                     String(digitalRead(LED2)) + "," +
+                     String(digitalRead(LED3));
+    webSocket.broadcastTXT(message);
+}
+
 void setupWiFi() {
     WiFi.softAP(apSSID, apPassword);
-    Serial.print("Access Point Started: ");
-    Serial.println(apSSID);
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.softAPIP());
+    Serial.println("Access Point Started: " + String(apSSID));
+    Serial.println("IP Address: " + WiFi.softAPIP().toString());
+}
+
+void setupWebSocket() {
+    webSocket.begin();
+    sendLEDState();
+    webSocket.onEvent([](uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+        if (type == WStype_TEXT) {
+            String command = String((char*)payload);
+            if (command == "TOGGLE") {
+                buttonPressed = true;
+            }
+        }
+    });
+    Serial.println("WebSocket server started.");
 }
 
 void setupServer() {
-  server.on("/", []() {
-    server.send(200, "text/html",
-      "<!DOCTYPE html>"
-      "<html>"
-      "<head>"
-      "<title>LED Control</title>"
-      "<style>"
-      "body {text-align:center; font-family:Arial;}"
-      "button {font-size:20px; padding:10px;}"
-      "</style>"
-      "</head>"
-      "<body>"
-      "<h1>LED Control via Web</h1>"
-      "<button onclick=\"stopLEDs()\">Stop LEDs for 15 seconds</button>"  // Виправлено
-      "<button onclick=\"simulateButtonRemote()\">Press Remote Button</button>"
-      "<script>"
-      "function stopLEDs() {"
-      "  fetch('/stopLEDs').then(response => response.text()).then(data => {"
-      "    console.log(data);"
-      "    alert(data);"
-      "  });"
-      "}"
-      "function simulateButtonRemote() {"
-      "  fetch('/simulateRemote').then(response => response.text()).then(data => {"
-      "    console.log(data);"
-      "    alert(data);"
-      "  });"
-      "}"
-      "</script>"
-      "</body>"
-      "</html>"
-    );
-  });
+    server.on("/", []() {
+        server.send(200, "text/html",
+          "<!DOCTYPE html>"
+          "<html>"
+          "<head>"
+          "<title>LED Control</title>"
+          "<style>"
+          "body {text-align:center; font-family:Arial;}"
+          "button {font-size:20px; padding:10px;}"
+          ".led {width: 50px; height: 50px; display: inline-block; border-radius: 50%; margin: 10px;}"
+          "</style>"
+          "</head>"
+          "<body>"
+          "<h1>LED Control via Web</h1>"
+          "<button onclick=\"stopLEDs()\">Stop LEDs for 15 seconds</button>"
+          "<button onclick=\"simulateButtonRemote()\">Press Remote Button</button>"
+          "<div>"
+          "<div id='led1' class='led' style='background-color:gray;'></div>"
+          "<div id='led2' class='led' style='background-color:gray;'></div>"
+          "<div id='led3' class='led' style='background-color:gray;'></div>"
+          "</div>"
+          "<script>"
+          "var ws = new WebSocket('ws://' + location.hostname + ':81/');"
+          "ws.onmessage = function(event) {"
+          "  var states = event.data.split(',');"
+          "  document.getElementById('led1').style.backgroundColor = states[0] == '1' ? 'green' : 'gray';"
+          "  document.getElementById('led2').style.backgroundColor = states[1] == '1' ? 'red' : 'gray';"
+          "  document.getElementById('led3').style.backgroundColor = states[2] == '1' ? 'red' : 'gray';"
+          "};"
+          "function stopLEDs() { fetch('/stopLEDs'); }"
+          "function simulateButtonRemote() { fetch('/simulateRemote'); }"
+          "</script>"
+          "</body>"
+          "</html>"
+        );
+    });
 
     server.on("/stopLEDs", []() {
         buttonPressed = true;
@@ -90,17 +114,14 @@ void setupServer() {
         server.send(200, "text/plain", "LEDs will stop for 15 seconds.");
     });
 
-    server.begin();
-    Serial.println("Server started.");
-
     server.on("/simulateRemote", []() {
-        buttonPressed = true;
         communicationService.send(ToogleCommand::ON);
         server.send(200, "text/plain", "Simulated remote button press.");
     });
-    
-}
 
+    server.begin();
+    Serial.println("Server started.");
+}
 void handleButtonPress() {
     if (buttonPressed && !isStopped) {
         isStopped = true;
@@ -108,6 +129,7 @@ void handleButtonPress() {
         digitalWrite(LED1, LOW);
         digitalWrite(LED2, LOW);
         digitalWrite(LED3, LOW);
+        sendLEDState();
         Serial.println("Button pressed! Stopping for 15 seconds...");
         buttonPressed = false;
     }
@@ -118,6 +140,7 @@ void handleTimer() {
         isStopped = false;
         Serial.println("Timer finished! Resuming...");
         communicationService.send(ToogleCommand::ON);
+        sendLEDState();
     }
 }
 
@@ -132,6 +155,7 @@ void updateLEDs() {
         digitalWrite(LED1, ledState == 0 ? HIGH : LOW);
         digitalWrite(LED2, ledState == 1 ? HIGH : LOW);
         digitalWrite(LED3, ledState == 2 ? HIGH : LOW);
+        sendLEDState();
         Serial.print("New State: ");
         Serial.println(ledState);
     }
@@ -141,6 +165,7 @@ void setup() {
     Serial.begin(9600);
     setupPins();
     setupWiFi();
+    setupWebSocket();
     setupServer();
     communicationService.init();
 
@@ -149,6 +174,7 @@ void setup() {
 
 void loop() {
     server.handleClient();
+    webSocket.loop();
     handleButtonPress();
     handleTimer();
     updateLEDs();

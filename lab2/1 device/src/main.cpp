@@ -6,9 +6,9 @@
 #include "ToogleCommand.h"
 #include <WebSocketsServer.h> 
 
-#define GREEN_LED D6
-#define RED_LED D4
-#define BLUE_LED D7
+#define GREEN_LED D5
+#define RED_LED D1
+#define BLUE_LED D2
 #define BUTTON_PIN D3
 
 const char* ssid = "ESP8266_AP";
